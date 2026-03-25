@@ -1,0 +1,13 @@
+# ── Core computer-vision & face recognition ──────────────────────────────────
+opencv-python>=4.8.0
+face-recognition>=1.3.0
+numpy>=1.24.0
+
+# ── face_recognition build dependencies (pre-built wheels recommended) ────────
+# dlib is pulled in automatically by face-recognition.
+# On Windows, install a pre-built wheel or use:
+#   conda install -c conda-forge dlib
+# before running pip install -r requirements.txt.
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+Pillow>=10.0.0          # image I/O support used internally by face_recognition
