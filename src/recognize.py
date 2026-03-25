@@ -215,6 +215,85 @@ def run_recognition() -> None:
     get_today_summary()
 
 
+def run_recognition_from_image(image_path_str: str) -> None:
+    """
+    Process a single image file for attendance.
+    Useful for 'uploading' a photo to mark attendance.
+    """
+    image_path = Path(image_path_str).resolve()
+    if not image_path.exists():
+        print(f"[ERROR] Image file not found: {image_path}")
+        return
+
+    known_encodings, known_names, known_regnos = load_encodings(ENCODINGS_FILE)
+
+    try:
+        rgb_frame = face_recognition.load_image_file(str(image_path))
+    except Exception as e:
+        print(f"[ERROR] Could not load image: {e}")
+        return
+
+    # ──── BULLETPROOF CONVERSION ───────────────────────────────────────
+    import numpy as np
+    if len(rgb_frame.shape) == 3 and rgb_frame.shape[2] == 4:
+        rgb_frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGBA2RGB)
+    elif len(rgb_frame.shape) == 2:
+        rgb_frame = cv2.cvtColor(rgb_frame, cv2.COLOR_GRAY2RGB)
+    elif len(rgb_frame.shape) == 3 and rgb_frame.shape[2] != 3:
+        rgb_frame = rgb_frame[:, :, :3]
+
+    if rgb_frame.dtype != "uint8":
+        rgb_frame = rgb_frame.astype("uint8")
+        
+    rgb_frame = np.ascontiguousarray(rgb_frame)
+    # ──────────────────────────────────────────────────────────────────
+
+    # Resize if very large (> 1600px)
+    h, w = rgb_frame.shape[:2]
+    if max(h, w) > 1600:
+        scale = 1600 / max(h, w)
+        rgb_frame = cv2.resize(rgb_frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+    print(f"\n[RECOG] Processing image: {image_path.name} ...")
+    
+    # Process the image
+    face_locations = face_recognition.face_locations(rgb_frame, model="hog")
+    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+
+    if not face_locations:
+        print("[RECOG] No faces detected in the image.")
+        return
+
+    print(f"[RECOG] Found {len(face_locations)} face(s).")
+    
+    # For drawing, convert to BGR
+    frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+    
+    for (top, right, bottom, left), encoding in zip(face_locations, face_encodings):
+        name, regno, distance = identify_face(
+            encoding, known_encodings, known_names, known_regnos
+        )
+
+        if name != "Unknown":
+            color = COLOR_KNOWN
+            mark_attendance(name, regno)
+        else:
+            color = COLOR_UNKNOWN
+            print(f"[RECOG] Unknown face detected (distance: {distance:.2f})")
+
+        draw_label(frame, top, right, bottom, left, name, regno, color)
+
+    # Save and show results
+    output_path = ROOT_DIR / f"attendance_result_{int(time.time())}.jpg"
+    cv2.imwrite(str(output_path), frame)
+    print(f"[RECOG] Result image saved to: {output_path.name}")
+    
+    # Show the result window
+    cv2.imshow("Recognition Result (Press any key to close)", frame)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
 # ── Allow running this module directly ────────────────────────────────────────
 if __name__ == "__main__":
     run_recognition()

@@ -58,12 +58,35 @@ def _validate_image(image_path: Path) -> None:
             f"Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
         )
 
-    bgr = cv2.imread(str(image_path))
-    if bgr is None:
-        raise ValueError(f"OpenCV could not read the image: {image_path}")
+    # Use PIL directly for the most robust RGB conversion possible
+    from PIL import Image
+    import numpy as np
+    try:
+        img = Image.open(str(image_path))
+        img = img.convert('RGB')
+        rgb = np.array(img)
+    except Exception as e:
+        raise ValueError(f"Could not load or convert image file: {e}")
 
-    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-    locations = face_recognition.face_locations(rgb, model="hog")
+    # Resize if very large (> 1600px)
+    h, w = rgb.shape[:2]
+    if max(h, w) > 1600:
+        scale = 1600 / max(h, w)
+        rgb = cv2.resize(rgb, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+    # Force contiguous memory
+    rgb = np.ascontiguousarray(rgb)
+
+    # Validate with face detection (with extra debug info for errors)
+    try:
+        locations = face_recognition.face_locations(rgb, model="hog")
+    except Exception as e:
+        print(f"\n[DEBUG] Image diagnostics for dlib error:")
+        print(f"  Shape: {rgb.shape}")
+        print(f"  Dtype: {rgb.dtype}")
+        print(f"  Type:  {type(rgb)}")
+        raise RuntimeError(f"Face detection engine failed: {e}")
+
     if not locations:
         raise ValueError(
             "No face detected in the provided image. "
@@ -78,7 +101,7 @@ def _prompt(label: str, current: str | None) -> str:
         print(f"[REGISTER] {label}: {current}")
         return current.strip()
     while True:
-        value = input(f"  Enter {label}: ").strip()
+        value = input(f"  Enter {label}: ").strip().strip('"').strip("'")
         if value:
             return value
         print(f"  ✗ {label} cannot be empty. Try again.")

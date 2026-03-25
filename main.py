@@ -98,6 +98,12 @@ def main() -> None:
         )
         return
 
+    # ── Upload/Image-based Recognition ────────────────────────────────────
+    if args.image and not args.register:
+        from src.recognize import run_recognition_from_image
+        run_recognition_from_image(args.image)
+        return
+
     # ── Show summary only ─────────────────────────────────────────────────
     if args.summary:
         get_today_summary()

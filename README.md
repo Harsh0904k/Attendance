@@ -10,12 +10,12 @@
 |---|---|
 | **Face Detection** | OpenCV + HOG model (via `face_recognition`) |
 | **Face Recognition** | 128-d encoding comparison (dlib deep-metric learning) |
-| **Dataset-based training** | One folder per person under `dataset/` |
-| **Attendance logging** | Daily CSV files with name, date, time, status |
+| **Student Registration** | New streamlined flow for name, reg. number, and photo |
+| **Attendance logging** | Daily CSV files with **Name, RegNo, Date, Time, Status** |
 | **Duplicate detection** | Same person cannot be marked twice per calendar day |
 | **Cooldown window** | 5-second gap between recognition events (prevents spam) |
-| **Real-time webcam** | Live bounding boxes with name and confidence labels |
-| **CLI modes** | `--train`, `--summary`, `--logs` flags |
+| **Real-time webcam** | Live bounding boxes with name and RegNo labels |
+| **CLI modes** | `--register`, `--train`, `--summary`, `--logs` flags |
 
 ---
 
@@ -24,15 +24,15 @@
 ```
 smart-attendance-cv/
 │
-├── dataset/                   ← Training images (one sub-folder per person)
-│   ├── person1/
-│   │   ├── img1.jpg
-│   │   └── img2.jpg
-│   └── person2/
-│       └── img1.jpg
+├── dataset/                   ← Training images (folder: REGNO_Name)
+│   ├── CS2023001_Alice/
+│   │   └── img_001.jpg
+│   └── CS2023002_Bob/
+│       └── img_001.jpg
 │
 ├── src/
 │   ├── __init__.py
+│   ├── register_student.py    ← Handles student registration & validation
 │   ├── train.py               ← Encodes dataset images → face_encodings.pkl
 │   ├── recognize.py           ← Real-time webcam recognition loop
 │   └── attendance.py          ← CSV logging + duplicate detection
@@ -49,189 +49,122 @@ smart-attendance-cv/
 
 ## Prerequisites
 
-| Requirement | Version |
-|---|---|
-| Python | 3.9 – 3.11 (recommended) |
-| Webcam | Any USB or built-in camera |
-| OS | Windows 10/11, Ubuntu 20.04+, macOS 12+ |
-
-> **Windows users:** `dlib` (a dependency of `face_recognition`) requires C++ build tools.  
-> The easiest path is to install a pre-built wheel:
-> ```bash
-> pip install https://github.com/z-mahmud22/Dlib_Windows_Python3.x/releases/download/v19.24.4/dlib-19.24.4-cp311-cp311-win_amd64.whl
-> ```
-> Choose the `.whl` that matches your Python version (`cp39`, `cp310`, `cp311`).
+- **Python:** 3.9 – 3.12
+- **Webcam:** Any USB or built-in camera
+- **OS:** Windows 10/11 (Preferred), Ubuntu, or macOS
 
 ---
 
-## Setup Instructions
+## 🛠 Detailed Setup (Windows Only)
 
-### 1. Clone / download the project
+`dlib` (the engine behind face recognition) is difficult to install on Windows. Follow **ONE** of these two options:
 
-```bash
-git clone https://github.com/<your-username>/smart-attendance-cv.git
-cd smart-attendance-cv
-```
+### Option A: Using Visual Studio (Recommended if you have it)
+1.  Install **Visual Studio Community** with the **"Desktop development with C++"** workload.
+2.  Open the **"Developer Command Prompt for VS 2022"** from your Start Menu.
+3.  Navigate to the project folder and run:
+    ```cmd
+    pip install cmake
+    pip install dlib
+    ```
 
-### 2. (Optional but recommended) Create a virtual environment
+### Option B: Using Pre-built Wheels (Faster, no VS required)
+1.  Check your Python version: `python --version`
+2.  Download the `.whl` matching your version from [this link](https://github.com/z-mahmud22/Dlib_Windows_Python3.x/releases).
+3.  Install it directly:
+    ```cmd
+    # Example for Python 3.11
+    pip install dlib-19.24.4-cp311-cp311-win_amd64.whl
+    ```
 
-```bash
-python -m venv venv
+---
 
-# Windows
-venv\Scripts\activate
+## 🚀 Execution Guide
 
-# Linux / macOS
-source venv/bin/activate
-```
-
-### 3. Install dependencies
-
+### 1. Install remaining dependencies
+Once `dlib` is installed via Option A or B above, run:
 ```bash
 pip install -r requirements.txt
 ```
 
-> If you hit a `dlib` build error on Windows, install the pre-built wheel first (see Prerequisites above), then re-run the above command.
-
-### 4. Add people to the dataset
-
-Create one sub-folder per person inside `dataset/` and add **at least 3–5 clear face photos** (JPG or PNG):
-
+### 2. Register Students (Add Photos & Info)
+Instead of manually creating folders, use the built-in registration command:
+```bash
+python main.py --register
 ```
-dataset/
-├── Alice/
-│   ├── alice_front.jpg
-│   └── alice_smile.jpg
-└── Bob/
-    ├── bob1.jpg
-    └── bob2.jpg
-```
+It will ask for:
+- **Name:** (e.g., Alice Smith)
+- **Registration Number:** (e.g., CS2023001)
+- **Photo Path:** (Path to a clear picture of the student)
 
-**Tips for better accuracy:**
-- Use well-lit, forward-facing photos.
-- Include varied expressions / angles if possible.
-- Folder name = the label that appears in attendance logs.
+**Note:** The system validates the photo to ensure a face is actually detectable before saving.
 
-### 5. Train the model
-
+### 3. Train the System
+If you didn't auto-train during registration, run:
 ```bash
 python main.py --train
 ```
 
-This scans `dataset/`, generates 128-d encodings for every detected face, and saves them to `src/face_encodings.pkl`.
-
-### 6. Run the system
-
+### 4. Run Attendance System
 ```bash
 python main.py
 ```
-
-If `face_encodings.pkl` does not exist yet, training runs automatically before recognition starts.
+- Stand in front of the webcam.
+- Once recognized, your name and RegNo will appear in green.
+- **Keys:** `Q` to Quit, `S` to show a summary in the console.
 
 ---
 
-## How to Run (Quick Reference)
+## How to Run (CLI Quick Reference)
 
-```bash
-# Full pipeline (auto-trains if needed, then opens webcam)
-python main.py
-
-# Force re-train (add new people or update photos)
-python main.py --train
-
-# Show today's attendance summary without opening webcam
-python main.py --summary
-
-# List all saved attendance log files
-python main.py --logs
-```
-
-**While the webcam window is open:**
-
-| Key | Action |
+| Command | Action |
 |---|---|
-| `Q` | Quit the system |
-| `S` | Print today's attendance summary to console |
+| `python main.py --register` | Interactive student registration |
+| `python main.py` | Start real-time recognition |
+| `python main.py --train` | Re-scan dataset and update encodings |
+| `python main.py --summary` | Print today's log summary (No camera) |
+| `python main.py --logs` | List all available log files |
 
 ---
 
 ## Example Console Output
 
 ```
-╔══════════════════════════════════════════════════════════╗
-║      SMART ATTENDANCE SYSTEM — Face Recognition CV       ║
-║           with Real-time Duplicate Detection             ║
-╚══════════════════════════════════════════════════════════╝
+[ATTENDANCE] ✓ 'Alice Smith' [CS2023001] marked PRESENT at 09:14:32.
+[WARNING] Duplicate detected: 'Alice Smith' [CS2023001] is already marked present.
 
-[RECOG] Loaded 12 face encoding(s) for 3 person(s).
-[RECOG] Camera opened. Press 'q' to quit, 's' for summary.
-[RECOG] Scanning for faces…
-
-[ATTENDANCE] ✓ 'Alice' marked PRESENT at 09:14:32 on 2026-03-25.
-[ATTENDANCE] ✓ 'Bob'   marked PRESENT at 09:15:01 on 2026-03-25.
-[WARNING] Duplicate detected: 'Alice' is already marked present for 2026-03-25. Skipping.
-
-==================================================
+=================================================================
   Attendance Summary — 2026-03-25
-==================================================
-   1. Alice                     09:14:32
-   2. Bob                       09:15:01
+=================================================================
+  #    Name                   Reg No           Time
+  ------------------------------------------------------------
+  1    Alice Smith            CS2023001        09:14:32
+  2    Bob Jones              CS2023002        09:15:01
 
   Total present: 2
-==================================================
+=================================================================
 ```
-
-### Example CSV Log (`attendance_logs/attendance_2026-03-25.csv`)
-
-```
-Name,Date,Time,Status
-Alice,2026-03-25,09:14:32,Present
-Bob,2026-03-25,09:15:01,Present
-```
-
----
-
-## Adding New Users
-
-1. Create a new folder under `dataset/`:
-   ```
-   dataset/NewPerson/
-   ```
-2. Copy at least 3–5 face images into that folder.
-3. Re-run training:
-   ```bash
-   python main.py --train
-   ```
-4. Restart the system:
-   ```bash
-   python main.py
-   ```
 
 ---
 
 ## Edge Cases Handled
 
-| Scenario | Behaviour |
-|---|---|
-| No face in frame | Console hint + "No face in frame" overlay |
-| Unknown face | Labelled **Unknown** with confidence score; no attendance logged |
-| Duplicate attendance | `[WARNING]` printed; CSV not modified |
-| Camera not available | Error message with troubleshooting hint; graceful exit |
-| Empty dataset | Error message; exit before training fails silently |
-| Corrupt / unreadable image | Warning per image; training continues with valid images |
+- **Unknown Face:** Labeled "Unknown" in red; attendance is NOT marked.
+- **No Face:** Status text "No face in frame" appears.
+- **Duplicate:** Prevents logging the same student twice in 24 hours.
+- **Cooldown:** A 5-second wait before recognizing the same person again (prevents log flooding).
 
 ---
 
 ## Tech Stack
 
 - **Python 3.9+**
-- **OpenCV** (`opencv-python`) — frame capture & rendering
-- **face_recognition** — HOG face detection + dlib 128-d embeddings
-- **NumPy** — vectorised distance calculations
-- **csv / pathlib / argparse** — stdlib; no extra dependencies
+- **OpenCV** — Frame processing
+- **dlib / face_recognition** — AI modeling
+- **NumPy** — Math & calculations
+- **CSV** — Storage
 
 ---
 
 ## License
-
-MIT — free to use, modify, and distribute.
+MIT — Free to use for university projects and personal use.
