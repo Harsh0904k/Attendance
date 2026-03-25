@@ -4,10 +4,15 @@ main.py
 Entry point for the Smart Attendance System.
 
 Usage:
-    python main.py            # Train (if needed) then start recognition
-    python main.py --train    # Force re-train the face encodings
-    python main.py --summary  # Show today's attendance summary and exit
+    python main.py                # Train (if needed) then start recognition
+    python main.py --register     # Register a new student (interactive)
+    python main.py --train        # Force re-train the face encodings
+    python main.py --summary      # Show today's attendance summary and exit
+    python main.py --logs         # List all saved log files
 
+Registration (scripted, non-interactive):
+    python main.py --register --name "Alice Smith" --regno CS2023001 \
+                              --image /path/to/photo.jpg --auto-train
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -20,9 +25,10 @@ ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.train      import run_training, ENCODINGS_FILE
-from src.recognize  import run_recognition
-from src.attendance import get_today_summary, get_all_logs
+from src.train              import run_training, ENCODINGS_FILE
+from src.recognize          import run_recognition
+from src.attendance         import get_today_summary, get_all_logs
+from src.register_student   import run_registration
 
 
 BANNER = r"""
@@ -37,6 +43,28 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Smart Attendance System using Face Recognition",
         formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        "--register",
+        action="store_true",
+        help="Register a new student (name, reg. number, and photo).",
+    )
+    parser.add_argument(
+        "--name",
+        help="[--register] Student full name (skips interactive prompt).",
+    )
+    parser.add_argument(
+        "--regno",
+        help="[--register] Registration / roll number (skips interactive prompt).",
+    )
+    parser.add_argument(
+        "--image",
+        help="[--register] Path to the student's face photo (skips interactive prompt).",
+    )
+    parser.add_argument(
+        "--auto-train",
+        action="store_true",
+        help="[--register] Automatically re-train after registration.",
     )
     parser.add_argument(
         "--train",
@@ -59,6 +87,16 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     print(BANNER)
     args = parse_args()
+
+    # ── Register new student ──────────────────────────────────────────────
+    if args.register:
+        run_registration(
+            name       = args.name,
+            regno      = args.regno,
+            image      = args.image,
+            auto_train = args.auto_train,
+        )
+        return
 
     # ── Show summary only ─────────────────────────────────────────────────
     if args.summary:

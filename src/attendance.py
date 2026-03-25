@@ -3,7 +3,7 @@ attendance.py
 ─────────────────────────────────────────────────────────────────────────────
 Handles all CSV-based attendance operations:
   - Initialise / load the daily attendance log
-  - Mark attendance for a recognised person
+  - Mark attendance for a recognised person (with registration number)
   - Duplicate detection (same name, same calendar day)
   - Summary reporting
 ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ from datetime import datetime
 ATTENDANCE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "attendance_logs")
 DATE_FORMAT = "%Y-%m-%d"
 TIME_FORMAT = "%H:%M:%S"
-CSV_COLUMNS = ["Name", "Date", "Time", "Status"]
+CSV_COLUMNS = ["Name", "RegNo", "Date", "Time", "Status"]
 
 
 def _get_log_path(date_str: str) -> str:
@@ -38,7 +38,7 @@ def _load_existing_records(log_path: str) -> dict[str, list[dict]]:
     with open(log_path, newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
-            name = row["Name"]
+            name = row.get("Name", "")
             records.setdefault(name, []).append(row)
     return records
 
@@ -55,9 +55,9 @@ def is_duplicate(name: str, date_str: str | None = None) -> bool:
     return name in records
 
 
-def mark_attendance(name: str) -> bool:
+def mark_attendance(name: str, regno: str = "N/A") -> bool:
     """
-    Attempt to mark attendance for *name*.
+    Attempt to mark attendance for *name* with registration number *regno*.
 
     Returns:
         True  – attendance recorded successfully.
@@ -75,8 +75,8 @@ def mark_attendance(name: str) -> bool:
     # ── Duplicate check ───────────────────────────────────────────────────
     if is_duplicate(name, date_str):
         print(
-            f"[WARNING] Duplicate detected: '{name}' is already marked present "
-            f"for {date_str}. Skipping."
+            f"[WARNING] Duplicate detected: '{name}' ({regno}) is already marked "
+            f"present for {date_str}. Skipping."
         )
         return False
 
@@ -87,13 +87,14 @@ def mark_attendance(name: str) -> bool:
         if not file_exists:
             writer.writeheader()          # write header only for new files
         writer.writerow({
-            "Name": name,
-            "Date": date_str,
-            "Time": time_str,
+            "Name":   name,
+            "RegNo":  regno,
+            "Date":   date_str,
+            "Time":   time_str,
             "Status": "Present",
         })
 
-    print(f"[ATTENDANCE] ✓ '{name}' marked PRESENT at {time_str} on {date_str}.")
+    print(f"[ATTENDANCE] ✓ '{name}' [{regno}] marked PRESENT at {time_str} on {date_str}.")
     return True
 
 
@@ -103,19 +104,23 @@ def get_today_summary() -> None:
     log_path = _get_log_path(date_str)
     records = _load_existing_records(log_path)
 
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 65)
     print(f"  Attendance Summary — {date_str}")
-    print("=" * 50)
+    print("=" * 65)
+    print(f"  {'#':<4} {'Name':<22} {'Reg No':<16} {'Time'}")
+    print("  " + "-" * 60)
 
     if not records:
         print("  No attendance recorded yet today.")
     else:
         for i, (name, entries) in enumerate(sorted(records.items()), start=1):
-            entry = entries[0]          # first entry of the day
-            print(f"  {i:>2}. {name:<25} {entry['Time']}")
+            entry  = entries[0]
+            regno  = entry.get("RegNo", "N/A")
+            time   = entry.get("Time", "")
+            print(f"  {i:<4} {name:<22} {regno:<16} {time}")
 
     print(f"\n  Total present: {len(records)}")
-    print("=" * 50 + "\n")
+    print("=" * 65 + "\n")
 
 
 def get_all_logs() -> list[str]:

@@ -9,8 +9,8 @@ Algorithm:
   2. Resize each frame for faster processing.
   3. Detect all faces in the frame (HOG model).
   4. Compare each detected face against the known encodings.
-  5. Call mark_attendance() for every confirmed identity.
-  6. Overlay bounding boxes and labels on the display frame.
+  5. Call mark_attendance(name, regno) for every confirmed identity.
+  6. Overlay bounding boxes, name, and reg. number on the display frame.
   7. Exit when 'q' is pressed or the camera becomes unavailable.
 ─────────────────────────────────────────────────────────────────────────────
 """
@@ -31,19 +31,21 @@ from src.attendance import mark_attendance, get_today_summary
 ROOT_DIR       = Path(__file__).resolve().parent.parent
 ENCODINGS_FILE = ROOT_DIR / "src" / "face_encodings.pkl"
 
-RESIZE_SCALE      = 0.5      # Scale frames down for speed (keep < 1.0)
-RECOGNITION_THRESHOLD = 0.50 # Maximum face distance to accept a match
-COOLDOWN_SECONDS  = 5        # Skip repeated recognition attempts for same face
-CAMERA_INDEX      = 0        # Default webcam index
+RESIZE_SCALE          = 0.5      # Scale frames down for speed (keep < 1.0)
+RECOGNITION_THRESHOLD = 0.50     # Maximum face distance to accept a match
+COOLDOWN_SECONDS      = 5        # Skip repeated recognition attempts per face
+CAMERA_INDEX          = 0        # Default webcam index
 
 # Colours (BGR)
 COLOR_KNOWN   = (0, 200, 80)    # green for recognised faces
-COLOR_UNKNOWN = (0, 80, 220)    # orange-red for unknown faces
-COLOR_TEXT_BG = (20, 20, 20)
+COLOR_UNKNOWN = (0, 80, 220)    # blue-red for unknown faces
 
 
-def load_encodings(encodings_path: Path) -> tuple[list, list[str]]:
-    """Load pre-computed encodings from disk. Exit if file not found."""
+def load_encodings(encodings_path: Path) -> tuple[list, list[str], list[str]]:
+    """
+    Load pre-computed encodings from disk.
+    Returns (encodings, names, regnos). Exits if file not found.
+    """
     if not encodings_path.exists():
         print(
             "[ERROR] Encodings file not found. "
@@ -56,67 +58,73 @@ def load_encodings(encodings_path: Path) -> tuple[list, list[str]]:
 
     encodings = data.get("encodings", [])
     names     = data.get("names", [])
+    # Graceful fallback for pickle files generated before reg. number support
+    regnos    = data.get("regnos", ["N/A"] * len(names))
 
     if not encodings:
         print("[ERROR] No encodings found in the saved file. Re-run training.")
         sys.exit(1)
 
-    print(f"[RECOG] Loaded {len(encodings)} face encoding(s) for {len(set(names))} person(s).")
-    return encodings, names
+    unique_students = len(set(zip(names, regnos)))
+    print(f"[RECOG] Loaded {len(encodings)} encoding(s) for {unique_students} student(s).")
+    return encodings, names, regnos
 
 
 def identify_face(
     face_encoding: np.ndarray,
     known_encodings: list,
     known_names: list[str],
-) -> tuple[str, float]:
+    known_regnos: list[str],
+) -> tuple[str, str, float]:
     """
     Compare a single face encoding against all known encodings.
 
     Returns:
-        (name, distance) — 'Unknown' and 1.0 when no match is found.
+        (name, regno, distance) — ('Unknown', 'N/A', 1.0) when no match found.
     """
     distances = face_recognition.face_distance(known_encodings, face_encoding)
     best_idx  = int(np.argmin(distances))
     best_dist = float(distances[best_idx])
 
     if best_dist <= RECOGNITION_THRESHOLD:
-        return known_names[best_idx], best_dist
-    return "Unknown", best_dist
+        return known_names[best_idx], known_regnos[best_idx], best_dist
+    return "Unknown", "N/A", best_dist
 
 
 def draw_label(
     frame: np.ndarray,
     top: int, right: int, bottom: int, left: int,
-    label: str,
+    name: str,
+    regno: str,
     color: tuple[int, int, int],
 ) -> None:
-    """Draw a bounding box and name label on the frame in place."""
-    # Bounding box
+    """Draw a bounding box, name, and registration number on the frame in place."""
+    # Main bounding box
     cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
 
-    # Label background
-    (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
-    cv2.rectangle(frame, (left, bottom - text_h - 10), (left + text_w + 6, bottom), color, -1)
-
-    # Label text
+    # Primary label: name
+    name_label = name if name == "Unknown" else f"{name}  |  {regno}"
+    (text_w, text_h), _ = cv2.getTextSize(name_label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+    label_bg_top = bottom - text_h - 12
+    cv2.rectangle(frame, (left, label_bg_top), (left + text_w + 8, bottom), color, -1)
     cv2.putText(
-        frame, label,
-        (left + 3, bottom - 5),
-        cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+        frame, name_label,
+        (left + 4, bottom - 5),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.55,
         (255, 255, 255), 1, cv2.LINE_AA,
     )
 
 
 def open_camera(index: int) -> cv2.VideoCapture:
     """Open the webcam and verify it is accessible."""
-    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)   # CAP_DSHOW for faster init on Windows
+    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        # Fallback: try without backend flag
         cap = cv2.VideoCapture(index)
     if not cap.isOpened():
-        print(f"[ERROR] Could not open camera at index {index}. "
-              "Check that a webcam is connected and not in use by another app.")
+        print(
+            f"[ERROR] Could not open camera at index {index}. "
+            "Check that a webcam is connected and not in use by another app."
+        )
         sys.exit(1)
     return cap
 
@@ -127,7 +135,7 @@ def run_recognition() -> None:
 
     Press 'q' to quit, 's' to print today's attendance summary.
     """
-    known_encodings, known_names = load_encodings(ENCODINGS_FILE)
+    known_encodings, known_names, known_regnos = load_encodings(ENCODINGS_FILE)
 
     cap = open_camera(CAMERA_INDEX)
     print("\n[RECOG] Camera opened. Press 'q' to quit, 's' for summary.")
@@ -135,7 +143,6 @@ def run_recognition() -> None:
 
     # Cooldown tracker: name → last-recognised timestamp
     last_seen: dict[str, float] = {}
-
     frame_count = 0
 
     while True:
@@ -149,7 +156,7 @@ def run_recognition() -> None:
 
         # ── Process every other frame to reduce CPU load ──────────────────
         if frame_count % 2 == 0:
-            small = cv2.resize(frame, (0, 0), fx=RESIZE_SCALE, fy=RESIZE_SCALE)
+            small     = cv2.resize(frame, (0, 0), fx=RESIZE_SCALE, fy=RESIZE_SCALE)
             rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
             face_locations = face_recognition.face_locations(rgb_small, model="hog")
@@ -163,7 +170,6 @@ def run_recognition() -> None:
             ]
 
             if not face_locations:
-                # Optionally display "No face detected" hint
                 cv2.putText(
                     frame, "No face in frame",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
@@ -173,23 +179,22 @@ def run_recognition() -> None:
             now = time.time()
 
             for (top, right, bottom, left), encoding in zip(scaled_locations, face_encodings):
-                name, distance = identify_face(encoding, known_encodings, known_names)
+                name, regno, distance = identify_face(
+                    encoding, known_encodings, known_names, known_regnos
+                )
 
                 if name != "Unknown":
                     color = COLOR_KNOWN
-                    label = f"{name} ({distance:.2f})"
-
-                    # Cooldown check before marking attendance
+                    # Attendance with cooldown guard
                     if now - last_seen.get(name, 0) > COOLDOWN_SECONDS:
-                        mark_attendance(name)
+                        mark_attendance(name, regno)
                         last_seen[name] = now
                 else:
                     color = COLOR_UNKNOWN
-                    label = f"Unknown ({distance:.2f})"
 
-                draw_label(frame, top, right, bottom, left, label, color)
+                draw_label(frame, top, right, bottom, left, name, regno, color)
 
-        # ── Overlay HUD info ──────────────────────────────────────────────
+        # ── Overlay HUD ───────────────────────────────────────────────────
         cv2.putText(
             frame, "Smart Attendance System  |  Q: Quit  S: Summary",
             (10, frame.shape[0] - 10),
