@@ -1,7 +1,7 @@
 # ── Core computer-vision & face recognition ──────────────────────────────────
 opencv-python>=4.8.0
 face-recognition>=1.3.0
-numpy>=1.24.0
+numpy<2.0.0
 
 # ── face_recognition build dependencies (pre-built wheels recommended) ────────
 # dlib is pulled in automatically by face-recognition.
