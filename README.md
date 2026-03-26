@@ -1,170 +1,134 @@
-# Smart Attendance System using Face Recognition
+# SMART ATTENDANCE SYSTEM — Face Recognition CV
 
-> A production-ready Computer Vision project that marks attendance in real-time from a webcam feed, prevents duplicate entries, and logs everything to timestamped CSV files.
-
----
-
-## Features
-
-| Feature | Details |
-|---|---|
-| **Face Detection** | OpenCV + HOG model (via `face_recognition`) |
-| **Face Recognition** | 128-d encoding comparison (dlib deep-metric learning) |
-| **Student Registration** | New streamlined flow for name, reg. number, and photo |
-| **Attendance logging** | Daily CSV files with **Name, RegNo, Date, Time, Status** |
-| **Duplicate detection** | Same person cannot be marked twice per calendar day |
-| **Cooldown window** | 5-second gap between recognition events (prevents spam) |
-| **Real-time webcam** | Live bounding boxes with name and RegNo labels |
-| **CLI modes** | `--register`, `--train`, `--summary`, `--logs` flags |
+> A production-grade Computer Vision system that marks attendance in real-time, prevents duplicate entries, and manages a student dataset. Optimized for **Windows 10/11** and **Python 3.12**.
 
 ---
 
-## Folder Structure
-
-```
-smart-attendance-cv/
-│
-├── dataset/                   ← Training images (folder: REGNO_Name)
-│   ├── CS2023001_Alice/
-│   │   └── img_001.jpg
-│   └── CS2023002_Bob/
-│       └── img_001.jpg
-│
-├── src/
-│   ├── __init__.py
-│   ├── register_student.py    ← Handles student registration & validation
-│   ├── train.py               ← Encodes dataset images → face_encodings.pkl
-│   ├── recognize.py           ← Real-time webcam recognition loop
-│   └── attendance.py          ← CSV logging + duplicate detection
-│
-├── attendance_logs/           ← Auto-created; one CSV per day
-│   └── attendance_YYYY-MM-DD.csv
-│
-├── main.py                    ← Entry point
-├── requirements.txt
-└── README.md
-```
+## 📋 Table of Contents
+1. [Prerequisites](#-prerequisites)
+2. [Detailed Windows Setup (dlib)](#-detailed-windows-setup-dlib)
+3. [Quick Start Guide](#-quick-start-guide)
+4. [CLI Module Reference](#-cli-module-reference)
+5. [Troubleshooting FAQ](#-troubleshooting-faq)
 
 ---
 
-## Prerequisites
+## 💻 Prerequisites
 
-- **Python:** 3.9 – 3.12
-- **Webcam:** Any USB or built-in camera
-- **OS:** Windows 10/11 (Preferred), Ubuntu, or macOS
+| Component | Requirement |
+| :--- | :--- |
+| **Python** | **3.12.x** (Standard 64-bit) |
+| **NumPy** | **< 2.0.0** (MANDATORY for dlib compatibility) |
+| **OpenCV** | **opencv-python** (NOT headless version) |
+| **Hardware** | Webcam (Built-in or USB) |
 
 ---
 
-## 🛠 Detailed Setup (Windows Only)
+## 🛠 Detailed Windows Setup (dlib)
 
-`dlib` (the engine behind face recognition) is difficult to install on Windows. Follow **ONE** of these two options:
+The `dlib` engine is the most challenging part to install on Windows. Follow **ONE** of these two methods:
 
-### Option A: Using Visual Studio (Recommended if you have it)
-1.  Install **Visual Studio Community** with the **"Desktop development with C++"** workload.
-2.  Open the **"Developer Command Prompt for VS 2022"** from your Start Menu.
-3.  Navigate to the project folder and run:
-    ```cmd
+### Method A: Using Pre-built Wheels (Fastest)
+1.  Check your Python version: `python --version`.
+2.  Go to [Dlib Windows Wheels Repository](https://github.com/z-mahmud22/Dlib_Windows_Python3.x/releases).
+3.  Download the `.whl` file that matches your version (e.g., `cp312` for Python 3.12).
+4.  In your terminal, navigate to the download folder and run:
+    ```powershell
+    pip install dlib-19.24.99-cp312-cp312-win_amd64.whl
+    ```
+
+### Method B: From Source (Robust)
+1.  Install **[Visual Studio Community](https://visualstudio.microsoft.com/downloads/)**.
+2.  During installation, select **"Desktop development with C++"**.
+3.  Ensure "C++ CMake tools for Windows" is checked in the optional components.
+4.  Open the "Developer Command Prompt for VS" and run:
+    ```powershell
     pip install cmake
     pip install dlib
     ```
 
-### Option B: Using Pre-built Wheels (Faster, no VS required)
-1.  Check your Python version: `python --version`
-2.  Download the `.whl` matching your version from [this link](https://github.com/z-mahmud22/Dlib_Windows_Python3.x/releases).
-3.  Install it directly:
-    ```cmd
-    # Example for Python 3.11
-    pip install dlib-19.24.4-cp311-cp311-win_amd64.whl
-    ```
-
 ---
 
-## 🚀 Execution Guide
+## ⚡ Quick Start Guide
 
-### 1. Install remaining dependencies
-Once `dlib` is installed via Option A or B above, run:
-```bash
+### 1. Initialize Environment
+```powershell
+# Create virtual environment
+python -m venv .venv
+.\.venv\Scripts\activate
+
+# Install NumPy 1.x first to avoid dlib errors
+pip install "numpy<2.0.0"
+
+# Install remaining dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Register Students (Add Photos & Info)
-Instead of manually creating folders, use the built-in registration command:
+### 2. Register a Student
+Use the interactive flow to add a student to the system.
 ```bash
 python main.py --register
 ```
-It will ask for:
-- **Name:** (e.g., Alice Smith)
-- **Registration Number:** (e.g., CS2023001)
-- **Photo Path:** (Path to a clear picture of the student)
+- Path to photo should be an absolute path (e.g. `C:\Users\Name\Desktop\photo.jpg`).
+- The system will auto-resize and normalize the image.
 
-**Note:** The system validates the photo to ensure a face is actually detectable before saving.
-
-### 3. Train the System
-If you didn't auto-train during registration, run:
+### 3. Generate Encodings
+You must run this at least once after registering students.
 ```bash
 python main.py --train
 ```
 
-### 4. Run Attendance System
+### 4. Run Live Recognition
 ```bash
 python main.py
 ```
-- Stand in front of the webcam.
-- Once recognized, your name and RegNo will appear in green.
-- **Keys:** `Q` to Quit, `S` to show a summary in the console.
+- **Q:** Quit.
+- **S:** Show today's attendance summary.
 
 ---
 
-## How to Run (CLI Quick Reference)
+## 📖 CLI Module Reference
 
-| Command | Action |
-|---|---|
-| `python main.py --register` | Interactive student registration |
-| `python main.py` | Start real-time recognition |
-| `python main.py --train` | Re-scan dataset and update encodings |
-| `python main.py --summary` | Print today's log summary (No camera) |
-| `python main.py --logs` | List all available log files |
+| Command | Goal | Why use it? |
+| :--- | :--- | :--- |
+| `python main.py --register` | Registration | Add new student info + photo safely. |
+| `python main.py --train` | Training | Update the digital "brain" (`face_encodings.pkl`). |
+| `python main.py` | Attendance | Start the real-time webcam scanner. |
+| `python main.py --summary` | Logs | Print today's attendane without opening camera. |
+| `python main.py --logs` | Audit | List all CSV log files in the `attendance_logs` directory. |
 
 ---
 
-## Example Console Output
+## ❓ Troubleshooting FAQ
 
-```
-[ATTENDANCE] ✓ 'Alice Smith' [CS2023001] marked PRESENT at 09:14:32.
-[WARNING] Duplicate detected: 'Alice Smith' [CS2023001] is already marked present.
+### 1. `RuntimeError: Unsupported image type`
+**Cause:** You have NumPy 2.x installed. dlib 19.x is built for NumPy 1.x.
+**Fix:** Run `pip install "numpy<2.0.0"`.
 
-=================================================================
-  Attendance Summary — 2026-03-25
-=================================================================
-  #    Name                   Reg No           Time
-  ------------------------------------------------------------
-  1    Alice Smith            CS2023001        09:14:32
-  2    Bob Jones              CS2023002        09:15:01
-
-  Total present: 2
-=================================================================
+### 2. `cv2.error: Unspecified error (...window.cpp)`
+**Cause:** `opencv-python-headless` is installed instead of `opencv-python`.
+**Fix:** 
+```powershell
+pip uninstall opencv-python-headless -y
+pip install opencv-python
 ```
 
----
+### 3. `AttributeError: module 'cv2' has no attribute 'VideoCapture'`
+**Cause:** Python 3.12 eagerly evaluating type hints.
+**Solution:** We have implemented a "Forward Reference" fix in `src/recognize.py`. Ensure you are using the latest code where the return type is wrapped in quotes: `-> "cv2.VideoCapture"`.
 
-## Edge Cases Handled
-
-- **Unknown Face:** Labeled "Unknown" in red; attendance is NOT marked.
-- **No Face:** Status text "No face in frame" appears.
-- **Duplicate:** Prevents logging the same student twice in 24 hours.
-- **Cooldown:** A 5-second wait before recognizing the same person again (prevents log flooding).
+### 4. Camera won't open
+**Fix:** Open `src/recognize.py` and change `CAMERA_INDEX = 0` to `1` or `2` if you have multiple cameras connected.
 
 ---
 
-## Tech Stack
-
-- **Python 3.9+**
-- **OpenCV** — Frame processing
-- **dlib / face_recognition** — AI modeling
-- **NumPy** — Math & calculations
-- **CSV** — Storage
+## 📂 Project Structure
+- `dataset/`: Raw student images organized by `RegNo_Name`.
+- `src/`: Core logic modules (Attendace, Training, Recognition).
+- `attendance_logs/`: Auto-generated daily CSV reports.
+- `main.py`: The single entry point for all operations.
 
 ---
 
-## License
-MIT — Free to use for university projects and personal use.
+## ⚖ License
+MIT — Free to use for projects, portfolios, and university submissions.
