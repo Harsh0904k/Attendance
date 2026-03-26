@@ -115,7 +115,7 @@ def draw_label(
     )
 
 
-def open_camera(index: int) -> cv2.VideoCapture:
+def open_camera(index: int) -> "cv2.VideoCapture":
     """Open the webcam and verify it is accessible."""
     cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
     if not cap.isOpened():
@@ -233,26 +233,12 @@ def run_recognition_from_image(image_path_str: str) -> None:
         print(f"[ERROR] Could not load image: {e}")
         return
 
-    # ──── BULLETPROOF CONVERSION ───────────────────────────────────────
-    import numpy as np
-    if len(rgb_frame.shape) == 3 and rgb_frame.shape[2] == 4:
-        rgb_frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGBA2RGB)
-    elif len(rgb_frame.shape) == 2:
-        rgb_frame = cv2.cvtColor(rgb_frame, cv2.COLOR_GRAY2RGB)
-    elif len(rgb_frame.shape) == 3 and rgb_frame.shape[2] != 3:
-        rgb_frame = rgb_frame[:, :, :3]
-
-    if rgb_frame.dtype != "uint8":
-        rgb_frame = rgb_frame.astype("uint8")
-        
-    rgb_frame = np.ascontiguousarray(rgb_frame)
-    # ──────────────────────────────────────────────────────────────────
-
     # Resize if very large (> 1600px)
     h, w = rgb_frame.shape[:2]
     if max(h, w) > 1600:
         scale = 1600 / max(h, w)
         rgb_frame = cv2.resize(rgb_frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        rgb_frame = np.ascontiguousarray(rgb_frame.astype(np.uint8))
 
     print(f"\n[RECOG] Processing image: {image_path.name} ...")
     

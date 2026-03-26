@@ -27,6 +27,7 @@ from pathlib import Path
 
 import cv2
 import face_recognition
+import numpy as np
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT_DIR    = Path(__file__).resolve().parent.parent
@@ -45,10 +46,10 @@ def _sanitise(text: str) -> str:
     return "".join(c for c in text if c not in unsafe).strip()
 
 
-def _validate_image(image_path: Path) -> None:
+def _validate_image(image_path: Path) -> np.ndarray:
     """
     Raise ValueError if the image cannot be read or contains no detectable face.
-    This gives early, friendly feedback before any files are written.
+    Returns the processed RGB numpy array.
     """
     if not image_path.exists():
         raise ValueError(f"Image file not found: {image_path}")
@@ -58,33 +59,24 @@ def _validate_image(image_path: Path) -> None:
             f"Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
         )
 
-    # Use PIL directly for the most robust RGB conversion possible
-    from PIL import Image
-    import numpy as np
+    # Load via face_recognition's own loader — guaranteed dlib-compatible array
     try:
-        img = Image.open(str(image_path))
-        img = img.convert('RGB')
-        rgb = np.array(img)
+        rgb = face_recognition.load_image_file(str(image_path))
     except Exception as e:
         raise ValueError(f"Could not load or convert image file: {e}")
 
-    # Resize if very large (> 1600px)
+    # Resize if very large (> 1600px) — re-normalize after resize
     h, w = rgb.shape[:2]
     if max(h, w) > 1600:
         scale = 1600 / max(h, w)
         rgb = cv2.resize(rgb, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        # cv2.resize can change dtype; force back to dlib-compatible uint8 C-array
+        rgb = np.ascontiguousarray(rgb.astype(np.uint8))
 
-    # Force contiguous memory
-    rgb = np.ascontiguousarray(rgb)
-
-    # Validate with face detection (with extra debug info for errors)
+    # Validate with face detection
     try:
         locations = face_recognition.face_locations(rgb, model="hog")
     except Exception as e:
-        print(f"\n[DEBUG] Image diagnostics for dlib error:")
-        print(f"  Shape: {rgb.shape}")
-        print(f"  Dtype: {rgb.dtype}")
-        print(f"  Type:  {type(rgb)}")
         raise RuntimeError(f"Face detection engine failed: {e}")
 
     if not locations:
@@ -93,6 +85,7 @@ def _validate_image(image_path: Path) -> None:
             "Please use a clear, well-lit, forward-facing photo."
         )
     print(f"[REGISTER] ✓ Face detected in image ({len(locations)} face(s) found).")
+    return rgb
 
 
 def _prompt(label: str, current: str | None) -> str:
@@ -150,7 +143,7 @@ def register_student(
 
     # ── Validate image ────────────────────────────────────────────────────
     try:
-        _validate_image(image_path)
+        rgb = _validate_image(image_path)
     except ValueError as exc:
         print(f"\n[ERROR] {exc}")
         sys.exit(1)
@@ -162,10 +155,15 @@ def register_student(
     student_dir = DATASET_DIR / folder_name
     student_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Copy image into student folder ────────────────────────────────────
-    dest_filename = _next_image_filename(student_dir, image_path.suffix.lower())
+    # ── Save processed image into student folder ──────────────────────────
+    # Instead of copying the original (which could be huge), we save the 
+    # normalized/resized version to ensure consistency and performance.
+    dest_filename = _next_image_filename(student_dir, ".jpg") # Normalize to .jpg
     dest_path = student_dir / dest_filename
-    shutil.copy2(str(image_path), str(dest_path))
+    
+    # Convert RGB back to BGR for OpenCV saving
+    bgr_for_save = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(dest_path), bgr_for_save)
 
     print(f"\n[REGISTER] Student registered successfully!")
     print(f"  Name            : {name}")

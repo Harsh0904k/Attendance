@@ -34,6 +34,25 @@ ENCODINGS_FILE = ROOT_DIR / "src" / "face_encodings.pkl"
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
+def _normalize_for_fr(arr: "np.ndarray") -> "np.ndarray":
+    """
+    Guarantee the array is a uint8, 3-channel (H×W×3), C-contiguous RGB image
+    — exactly what dlib / face_recognition requires.
+    """
+    import numpy as np
+    # Drop alpha channel if present (RGBA → RGB)
+    if arr.ndim == 3 and arr.shape[2] == 4:
+        arr = arr[:, :, :3]
+    # Ensure exactly 3 dims and 3 channels
+    if arr.ndim != 3 or arr.shape[2] != 3:
+        raise ValueError(f"Unexpected image shape: {arr.shape}")
+    # Cast to uint8 (cv2.resize can silently promote to float)
+    arr = arr.astype(np.uint8)
+    # Re-enforce C-contiguous memory layout
+    arr = np.ascontiguousarray(arr)
+    return arr
+
+
 def _parse_folder_name(folder_name: str) -> tuple[str, str]:
     """
     Split <REGNO>_<Name> into (regno, name).
@@ -81,32 +100,21 @@ def load_images_from_dataset(dataset_path: Path) -> tuple[list, list[str], list[
         person_count = 0
 
         for img_path in image_files:
+            # Use face_recognition's own loader — only method guaranteed to be
+            # dlib-compatible (bypasses numpy ABI issues on Python 3.12)
             try:
                 rgb = face_recognition.load_image_file(str(img_path))
             except Exception:
                 print(f"[WARN ] Could not load image: {img_path.name}. Skipping.")
                 continue
 
-            # ──── BULLETPROOF CONVERSION ──────────────────────────────
-            import numpy as np
-            if len(rgb.shape) == 3 and rgb.shape[2] == 4:
-                rgb = cv2.cvtColor(rgb, cv2.COLOR_RGBA2RGB)
-            elif len(rgb.shape) == 2:
-                rgb = cv2.cvtColor(rgb, cv2.COLOR_GRAY2RGB)
-            elif len(rgb.shape) == 3 and rgb.shape[2] != 3:
-                rgb = rgb[:, :, :3]
-
-            if rgb.dtype != "uint8":
-                rgb = rgb.astype("uint8")
-            
-            rgb = np.ascontiguousarray(rgb)
-            # ──────────────────────────────────────────────────────────
-
             # Resize if very large (> 1600px)
             h, w = rgb.shape[:2]
             if max(h, w) > 1600:
                 scale = 1600 / max(h, w)
                 rgb = cv2.resize(rgb, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+                # cv2.resize can change dtype; restore dlib-compatible uint8 C-array
+                rgb = _normalize_for_fr(rgb)
 
             boxes = face_recognition.face_locations(rgb, model="hog")
             if not boxes:
